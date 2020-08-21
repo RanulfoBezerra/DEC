@@ -14,8 +14,12 @@ from keras.callbacks import EarlyStopping
 from keras.layers import Input, Dense, Activation, BatchNormalization, Flatten, Conv2D
 from keras.layers import MaxPooling2D, Dropout, UpSampling2D
 from keras.models import load_model
+from keras.callbacks import CSVLogger
 
-TRAIN_IMAGES = glob.glob('data/cars/train/*.png')
+from keras.layers import Conv2D, Conv2DTranspose, Dense, Flatten, Reshape
+from keras.models import Sequential, Model
+
+TRAIN_IMAGES = glob.glob('data/cars/all/*.png')
 TEST_IMAGES = glob.glob('data/cars/test/*.png')
 
 
@@ -27,8 +31,11 @@ def load_image(path):
         # x = image.img_to_array(img).astype('float32')
         # x = x / 255.0
         image = cv2.imread(fig)
+        # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        # image = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
         # gray_img = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         image = cv2.resize(image, (dim, dim))
+        # image = image.reshape((-1, 3))
         # gray_img = cv2.resize(gray_img, (128, 128))
         # cv2.imwrite("gray_images/gray_" + str(count) + ".jpg", gray_img)
         # cv2.imwrite("color_images/color_" + str(count) + ".jpg", image)
@@ -76,97 +83,128 @@ class Autoencoder():
             # self.encoder.save_weights(self.filepath, overwrite=True)
         self.encoder.save(self.filepath, overwrite=True)
 
+
     def build_model(self):
-        input_layer = Input(shape=self.img_shape)
+        input_shape = Input(shape=self.img_shape)
+        input_shape = self.img_shape
+        filters = [32, 64, 128, 10]
+        model = Sequential()
+        if self.img_shape[0] % 8 == 0:
+            pad3 = 'same'
+        else:
+            pad3 = 'valid'
+        model.add(
+            Conv2D(filters[0], 5, strides=2, padding='same', activation='relu', name='conv1', input_shape=self.img_shape))
 
-        print("IMAGE SHAPE===========", self.img_shape)
+        model.add(Conv2D(filters[1], 5, strides=2, padding='same', activation='relu', name='conv2'))
 
-        x = Conv2D(64, (3, 3), padding='same')(input_layer)
-        x = BatchNormalization()(x)
-        x = Activation('relu')(x)
-        x = MaxPooling2D((2, 2), padding='same')(x)
-        x = Conv2D(32, (3, 3), padding='same')(x)
-        x = BatchNormalization()(x)
-        x = Activation('relu')(x)
-        x = MaxPooling2D((2, 2), padding='same')(x)
-        x = Conv2D(16, (3, 3), padding='same')(x)
-        x = BatchNormalization()(x)
-        x = Activation('relu')(x)
-        x = MaxPooling2D((2, 2), padding='same')(x)
+        model.add(Conv2D(filters[2], 3, strides=2, padding=pad3, activation='relu', name='conv3'))
 
-        x = Conv2D(8, (3, 3), padding='same')(x)
-        x = BatchNormalization()(x)
-        x = Activation('relu')(x)
-        x = MaxPooling2D((2, 2), padding='same')(x)
+        model.add(Flatten())
+        model.add(Dense(units=filters[3], name='embedding'))
+        model.add(Dense(units=filters[2] * int(input_shape[0] / 8) * int(input_shape[0] / 8), activation='relu'))
 
-        x = Conv2D(4, (3, 3), padding='same')(x)
-        x = BatchNormalization()(x)
-        x = Activation('relu')(x)
-        x = MaxPooling2D((2, 2), padding='same')(x)
+        model.add(Reshape((int(input_shape[0] / 8), int(input_shape[0] / 8), filters[2])))
+        model.add(Conv2DTranspose(filters[1], 3, strides=2, padding=pad3, activation='relu', name='deconv3'))
 
-        x = Conv2D(2, (3, 3), padding='same')(x)
-        x = BatchNormalization()(x)
-        x = Activation('relu')(x)
-        encoded = MaxPooling2D((2, 2), padding='same')(x)
+        model.add(Conv2DTranspose(filters[0], 5, strides=2, padding='same', activation='relu', name='deconv2'))
 
+        model.add(Conv2DTranspose(input_shape[2], 5, strides=2, padding='same', name='deconv1'))
+        model.summary()
+        return model
 
-
-        x = Conv2D(2, (3, 3), padding='same')(encoded)
-        x = BatchNormalization()(x)
-        x = Activation('relu')(x)
-        x = UpSampling2D((2, 2))(x)
-
-        x = Conv2D(4, (3, 3), padding='same')(x)
-        x = BatchNormalization()(x)
-        x = Activation('relu')(x)
-        x = UpSampling2D((2, 2))(x)
-
-        x = Conv2D(8, (3, 3), padding='same')(x)
-        x = BatchNormalization()(x)
-        x = Activation('relu')(x)
-        x = UpSampling2D((2, 2))(x)
-
-        x = Conv2D(16, (3, 3), padding='same')(x)
-        x = BatchNormalization()(x)
-        x = Activation('relu')(x)
-        x = UpSampling2D((2, 2))(x)
-        x = Conv2D(32, (3, 3), padding='same')(x)
-        x = BatchNormalization()(x)
-        x = Activation('relu')(x)
-        x = UpSampling2D((2, 2))(x)
-        x = Conv2D(64, (3, 3), padding='same')(x)
-        x = BatchNormalization()(x)
-        x = Activation('relu')(x)
-        x = UpSampling2D((2, 2))(x)
-        x = Conv2D(3, (3, 3), padding='same')(x)
-        x = BatchNormalization()(x)
-        decoded = Activation('sigmoid')(x)
-        output_layer = decoded
-
-        # # encoder
-        # h = Conv2D(64, (3, 3), activation='relu', padding='same')(input_layer)
-        # h = MaxPooling2D((2, 2), padding='same')(h)
-        #
-        # # decoder
-        # h = Conv2D(64, (3, 3), activation='relu', padding='same')(h)
-        # h = UpSampling2D((2, 2))(h)
-        # output_layer = Conv2D(3, (3, 3), activation='sigmoid', padding='same')(h)
-
-        return Model(input_layer, output_layer)
+    # def build_model(self):
+    #     input_layer = Input(shape=self.img_shape)
+    #
+    #     print("IMAGE SHAPE===========", self.img_shape)
+    #
+    #     x = Conv2D(64, (3, 3), padding='same')(input_layer)
+    #     x = BatchNormalization()(x)
+    #     x = Activation('relu')(x)
+    #     x = MaxPooling2D((2, 2), padding='same')(x)
+    #     x = Conv2D(32, (3, 3), padding='same')(x)
+    #     x = BatchNormalization()(x)
+    #     x = Activation('relu')(x)
+    #     x = MaxPooling2D((2, 2), padding='same')(x)
+    #     x = Conv2D(16, (3, 3), padding='same')(x)
+    #     x = BatchNormalization()(x)
+    #     x = Activation('relu')(x)
+    #     x = MaxPooling2D((2, 2), padding='same')(x)
+    #
+    #     x = Conv2D(8, (3, 3), padding='same')(x)
+    #     x = BatchNormalization()(x)
+    #     x = Activation('relu')(x)
+    #     encoded = MaxPooling2D((2, 2), padding='same')(x)
+    #
+    #     # x = Conv2D(4, (3, 3), padding='same')(x)
+    #     # x = BatchNormalization()(x)
+    #     # x = Activation('relu')(x)
+    #     # encoded = MaxPooling2D((2, 2), padding='same')(x)
+    #
+    #     # x = Conv2D(2, (3, 3), padding='same')(x)
+    #     # x = BatchNormalization()(x)
+    #     # x = Activation('relu')(x)
+    #     # encoded = MaxPooling2D((2, 2), padding='same')(x)
+    #
+    #
+    #
+    #     # x = Conv2D(2, (3, 3), padding='same')(encoded)
+    #     # x = BatchNormalization()(x)
+    #     # x = Activation('relu')(x)
+    #     # x = UpSampling2D((2, 2))(x)
+    #
+    #     # x = Conv2D(4, (3, 3), padding='same')(encoded)
+    #     # x = BatchNormalization()(x)
+    #     # x = Activation('relu')(x)
+    #     # x = UpSampling2D((2, 2))(x)
+    #
+    #     x = Conv2D(8, (3, 3), padding='same')(encoded)
+    #     x = BatchNormalization()(x)
+    #     x = Activation('relu')(x)
+    #     x = UpSampling2D((2, 2))(x)
+    #
+    #     x = Conv2D(16, (3, 3), padding='same')(x)
+    #     x = BatchNormalization()(x)
+    #     x = Activation('relu')(x)
+    #     x = UpSampling2D((2, 2))(x)
+    #     x = Conv2D(32, (3, 3), padding='same')(x)
+    #     x = BatchNormalization()(x)
+    #     x = Activation('relu')(x)
+    #     x = UpSampling2D((2, 2))(x)
+    #     x = Conv2D(64, (3, 3), padding='same')(x)
+    #     x = BatchNormalization()(x)
+    #     x = Activation('relu')(x)
+    #     x = UpSampling2D((2, 2))(x)
+    #     x = Conv2D(3, (3, 3), padding='same')(x)
+    #     x = BatchNormalization()(x)
+    #     decoded = Activation('sigmoid')(x)
+    #     output_layer = decoded
+    #
+    #     # # encoder
+    #     # h = Conv2D(64, (3, 3), activation='relu', padding='same')(input_layer)
+    #     # h = MaxPooling2D((2, 2), padding='same')(h)
+    #     #
+    #     # # decoder
+    #     # h = Conv2D(64, (3, 3), activation='relu', padding='same')(h)
+    #     # h = UpSampling2D((2, 2))(h)
+    #     # output_layer = Conv2D(3, (3, 3), activation='sigmoid', padding='same')(h)
+    #
+    #     return Model(input_layer, output_layer)
 
     def train_model(self, x_train, y_train, x_val, y_val, epochs, batch_size=30):
         early_stopping = EarlyStopping(monitor='val_loss',
                                        min_delta=0,
-                                       patience=5,
+                                       patience=10,
                                        verbose=1,
                                        mode='auto')
+        csv_logger = CSVLogger('results/autoencoder_pretrain_log.csv')
         history = self.autoencoder_model.fit(x_train, y_train,
                                              batch_size=batch_size,
                                              epochs=epochs,
                                              validation_data=(x_val, y_val),
-                                             callbacks=[early_stopping])
-        self.autoencoder_model.save("autoencoderModel.hdf5")
-        self.autoencoder_model.save_weights("autoencoderWeights.hdf5", overwrite=True)
+                                             callbacks=[csv_logger])
+        self.autoencoder_model.save("models/autoencoderModel_test.hdf5")
+        self.autoencoder_model.save_weights("models/autoencoderWeights_test.hdf5", overwrite=True)
         # plt.plot(history.history['loss'])
         # plt.plot(history.history['val_loss'])
         # plt.title('Model loss')
@@ -179,19 +217,18 @@ class Autoencoder():
         preds = self.autoencoder_model.predict(x_test)
         return preds
 
-# ae = Autoencoder()
-# ae.train_model(x_train, y_train, x_val, y_val, epochs=10, batch_size=10)
+ae = Autoencoder()
+ae.train_model(x_train, y_train, x_val, y_val, epochs=200, batch_size=5)
+model = ae.autoencoder_model
 
-# model = ae.autoencoder_model
-#
-# # model = load_model('autoencoderModel_30.hdf5')
-# score = model.evaluate(x_train, x_train, verbose=1)
-# print("Score", score)
-# layers = len(model.layers)
-# encoderLayer = int(layers/2) + 1
-# encoder = Model(model.layers[0].input, model.layers[encoderLayer].output)
-# encoder.save("encoderModel_4.hdf5")
-encoder = load_model("encoderModel_4.hdf5")
+# model = load_model('models/autoencoderModel_test.hdf5')
+score = model.evaluate(x_train, x_train, verbose=1)
+print("Score", score)
+layers = len(model.layers)
+encoderLayer = int(layers/2) - 1
+encoder = Model(model.layers[0].input, model.layers[encoderLayer].output)
+encoder.save("models/encoderModel_test.hdf5")
+# encoder = load_model("models/encoderModel_4.hdf5")
 # model.compile(loss='mse', optimizer=optimizer)
 encoder.summary()
 

@@ -140,7 +140,7 @@ class DEC(object):
         self.alpha = alpha
         self.autoencoder, self.encoder = autoencoder(self.dims, init=init)
 
-        self.encoder = load_model('encoderModel_4.hdf5')
+        self.encoder = load_model('models/encoderModel_best.hdf5')
 
         # prepare DEC model
         clustering_layer = ClusteringLayer(self.n_clusters, name='clustering')(self.encoder.output)
@@ -211,11 +211,11 @@ class DEC(object):
         t1 = time()
         print('Initializing cluster centers with k-means.')
         kmeans = KMeans(n_clusters=self.n_clusters, n_init=20)
-        encoded_data = self.encoder.predict(x)
+        # encoded_data = self.encoder.predict(x)
+        #
+        # data = np.reshape(encoded_data, (8,8))
 
-        data = np.reshape(encoded_data, (8,8))
-
-        y_pred = kmeans.fit_predict(data)
+        y_pred = kmeans.fit_predict(self.encoder.predict(x))
         y_pred_last = np.copy(y_pred)
         self.model.get_layer(name='clustering').set_weights([kmeans.cluster_centers_])
 
@@ -279,14 +279,15 @@ class DEC(object):
 
 
 def load_image(path):
-    image_list = np.zeros((len(path), 200, 200, 3))
+    dim = 128
+    image_list = np.zeros((len(path), 128, 128, 3))
     for i, fig in enumerate(path):
         # img = image.load_img(fig, target_size=(200, 200)) #color_mode='grayscale'
         # x = image.img_to_array(img).astype('float32')
         # x = x / 255.0
         image = cv2.imread(fig)
         # gray_img = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        image = cv2.resize(image, (200, 200))
+        image = cv2.resize(image, (dim, dim))
         # gray_img = cv2.resize(gray_img, (128, 128))
         # cv2.imwrite("gray_images/gray_" + str(count) + ".jpg", gray_img)
         # cv2.imwrite("color_images/color_" + str(count) + ".jpg", image)
@@ -321,7 +322,7 @@ if __name__ == "__main__":
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
 
-    TRAIN_IMAGES = glob.glob('data/cars/train/*.png')
+    TRAIN_IMAGES = glob.glob('data/cars/all/*.png')
     TEST_IMAGES = glob.glob('data/cars/test/*.png')
 
     x = load_image(TRAIN_IMAGES)
@@ -372,12 +373,23 @@ if __name__ == "__main__":
     # else:
     #     dec.autoencoder.load_weights(args.ae_weights)
 
-    dec.encoder = load_model('encoderModel_4.hdf5')
+    dec.encoder = load_model('models/encoderModel_best.hdf5')
 
-    dec.model.summary()
-    t0 = time()
-    dec.compile(optimizer=SGD(0.01, 0.9), loss='kld')
-    y_pred = dec.fit(x, y=None, tol=args.tol, maxiter=args.maxiter, batch_size=args.batch_size,
-                     update_interval=update_interval, save_dir=args.save_dir)
-    print('acc:', metrics.acc(y, y_pred))
-    print('clustering time: ', (time() - t0))
+    # dec.model.summary()
+    # t0 = time()
+    # dec.compile(optimizer=SGD(0.01, 0.9), loss='kld')
+    # y_pred = dec.fit(x, y=None, tol=args.tol, maxiter=args.maxiter, batch_size=args.batch_size,
+    #                  update_interval=update_interval, save_dir=args.save_dir)
+    # # print('acc:', metrics.acc(y, y_pred))
+    # print('clustering time: ', (time() - t0))
+
+    dec.model.load_weights('models/DEC_model_final2.h5')
+    y_pred = dec.model.predict(x)
+    print(y_pred)
+    print(y_pred.shape)
+
+    for i, img in enumerate(x):
+        img = img * 255
+        ind = np.argmax(y_pred[i])
+        cv2.imwrite('data/cars/label_result2/' +str(ind) + '_'+ str(i) + '.png', img)
+
