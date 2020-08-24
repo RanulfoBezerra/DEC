@@ -21,6 +21,7 @@ from keras import callbacks
 from keras.initializers import VarianceScaling
 from sklearn.cluster import KMeans
 import metrics
+from tensorflow.keras.layers import concatenate
 
 import sys
 import glob
@@ -142,9 +143,17 @@ class DEC(object):
 
         self.encoder = load_model('models/encoderModel_best.hdf5')
 
+        n_data = 4
+
+        input2 = Input(shape=(n_data,))
+        input1 = self.encoder.output
+
+        cluster_input = concatenate(input1, input2)
+
+
         # prepare DEC model
-        clustering_layer = ClusteringLayer(self.n_clusters, name='clustering')(self.encoder.output)
-        self.model = Model(inputs=self.encoder.input, outputs=clustering_layer)
+        clustering_layer = ClusteringLayer(self.n_clusters, name='clustering')(cluster_input)
+        self.model = Model(inputs=[self.encoder.input, Input(shape=(n_data,))], outputs=clustering_layer)
 
     def pretrain(self, x, y=None, optimizer='adam', epochs=200, batch_size=256, save_dir='results/temp'):
         print('...Pretraining...')
