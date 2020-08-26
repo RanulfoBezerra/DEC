@@ -28,6 +28,8 @@ import glob
 sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
 import cv2
 from keras.models import load_model
+import math
+from tensorflow.keras.models import Sequential
 
 
 def autoencoder(dims, act='relu', init='glorot_uniform'):
@@ -141,19 +143,25 @@ class DEC(object):
         self.alpha = alpha
         self.autoencoder, self.encoder = autoencoder(self.dims, init=init)
 
-        self.encoder = load_model('models/encoderModel_best.hdf5')
+        self.encoder = load_model('/media/ranulfo/Data/DEC/models/encoderModel_best.hdf5')
 
         n_data = 4
 
-        input2 = Input(shape=(n_data,))
+        model = Sequential()
+        model.add(Dense(8, input_dim=self.input_dim, activation="relu"))
+        model.add(Dense(5, activation="relu"))
+
+        self.mlp_model = model
+
+        input2 = self.mlp_model.output
         input1 = self.encoder.output
 
-        cluster_input = concatenate(input1, input2)
+        cluster_input = concatenate([input1, input2])
 
 
         # prepare DEC model
         clustering_layer = ClusteringLayer(self.n_clusters, name='clustering')(cluster_input)
-        self.model = Model(inputs=[self.encoder.input, Input(shape=(n_data,))], outputs=clustering_layer)
+        self.model = Model(inputs=[self.encoder.input, self.mlp_model.input], outputs=clustering_layer)
 
     def pretrain(self, x, y=None, optimizer='adam', epochs=200, batch_size=256, save_dir='results/temp'):
         print('...Pretraining...')
@@ -191,6 +199,43 @@ class DEC(object):
         print('Pretrained weights are saved to %s/ae_weights.h5' % save_dir)
         self.pretrained = True
 
+    def pretrain_mlp(self, x, y=None, optimizer='adam', epochs=200, batch_size=256, save_dir='results/temp'):
+        print('...Pretraining...')
+        self.mlp_model.compile(optimizer=optimizer, loss='mse')
+
+        csv_logger = callbacks.CSVLogger(save_dir + '/pretrain_log.csv')
+        cb = [csv_logger]
+        if y is not None:
+            class PrintACC(callbacks.Callback):
+                def __init__(self, x, y):
+                    self.x = x
+                    self.y = y
+                    super(PrintACC, self).__init__()
+
+                def on_epoch_end(self, epoch, logs=None):
+                    if int(epochs/10) != 0 and epoch % int(epochs/10) != 0:
+                        return
+                    feature_model = Model(self.model.input,
+                                          self.model.get_layer(
+                                              'encoder_%d' % (int(len(self.model.layers) / 2) - 1)).output)
+                    features = feature_model.predict(self.x)
+                    km = KMeans(n_clusters=len(np.unique(self.y)), n_init=20, n_jobs=4)
+                    y_pred = km.fit_predict(features)
+                    # print()
+                    print(' '*8 + '|==>  acc: %.4f,  nmi: %.4f  <==|'
+                          % (metrics.acc(self.y, y_pred), metrics.nmi(self.y, y_pred)))
+
+            cb.append(PrintACC(x, y))
+
+        # begin pretraining
+        t0 = time()
+        self.mlp_model.fit(x, x, batch_size=batch_size, epochs=epochs, callbacks=cb)
+        print('Pretraining time: %ds' % round(time() - t0))
+        self.mlp_model.save_weights(save_dir + '/mlp_weights.h5')
+        self.mlp_model.save(save_dir + '/mlp.h5')
+        print('Pretrained weights are saved to %s/mlp_weights.h5' % save_dir)
+        self.pretrained = True
+
     def load_weights(self, weights):  # load weights of DEC model
         self.model.load_weights(weights)
 
@@ -213,7 +258,7 @@ class DEC(object):
             update_interval=140, save_dir='./results/temp'):
 
         print('Update interval', update_interval)
-        save_interval = int(x.shape[0] / batch_size) * 5  # 5 epochs
+        save_interval = int(x[0].shape[0] / batch_size) * 5  # 5 epochs
         print('Save interval', save_interval)
 
         # Step 1: initialize cluster centers using k-means
@@ -223,8 +268,8 @@ class DEC(object):
         # encoded_data = self.encoder.predict(x)
         #
         # data = np.reshape(encoded_data, (8,8))
-
-        y_pred = kmeans.fit_predict(self.encoder.predict(x))
+        kmean_input = np.concatenate((x[1], self.encoder.predict(x[0])), axis=1)
+        y_pred = kmeans.fit_predict(kmean_input)
         y_pred_last = np.copy(y_pred)
         self.model.get_layer(name='clustering').set_weights([kmeans.cluster_centers_])
 
@@ -237,7 +282,7 @@ class DEC(object):
 
         loss = 0
         index = 0
-        index_array = np.arange(x.shape[0])
+        index_array = np.arange(x[0].shape[0])
         for ite in range(int(maxiter)):
             if ite % update_interval == 0:
                 q = self.model.predict(x, verbose=0)
@@ -266,9 +311,9 @@ class DEC(object):
             # train on batch
             # if index == 0:
             #     np.random.shuffle(index_array)
-            idx = index_array[index * batch_size: min((index+1) * batch_size, x.shape[0])]
-            loss = self.model.train_on_batch(x=x[idx], y=p[idx])
-            index = index + 1 if (index + 1) * batch_size <= x.shape[0] else 0
+            idx = index_array[index * batch_size: min((index+1) * batch_size, x[0].shape[0])]
+            loss = self.model.train_on_batch(x=[x[0][idx],x[1][idx]], y=p[idx])
+            index = index + 1 if (index + 1) * batch_size <= x[0].shape[0] else 0
 
             # save intermediate model
             if ite % save_interval == 0:
@@ -287,14 +332,19 @@ class DEC(object):
 
 
 
-def load_image(path):
+def load_image(path, imgpath):
     dim = 128
     image_list = np.zeros((len(path), 128, 128, 3))
+    extension = 'png'
     for i, fig in enumerate(path):
         # img = image.load_img(fig, target_size=(200, 200)) #color_mode='grayscale'
         # x = image.img_to_array(img).astype('float32')
         # x = x / 255.0
-        image = cv2.imread(fig)
+
+        image = cv2.imread(imgpath + str(i).zfill(5) + '.' + extension)
+        if image is None:
+            print(imgpath + str(i).zfill(5) + '.' + extension)
+            continue
         # gray_img = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         image = cv2.resize(image, (dim, dim))
         # gray_img = cv2.resize(gray_img, (128, 128))
@@ -305,6 +355,48 @@ def load_image(path):
         image_list[i] = x
 
     return image_list
+
+
+def load_data(path):
+    data = np.load(path+'mapped_tracked.npy')
+    data = np.transpose(data)
+    x = data[0]
+    y = data[1]
+    rot = data[2]
+    id = data[4]
+    img = data[5]
+    cam = data[6]
+
+    idT = np.zeros(id.shape)
+
+    for i in range(len(data[4])):
+        idT[i] = int(str(int(cam[i])) + str(int(id[i])))
+
+    idT_max = max(idT)
+
+
+    x_min = min(x)
+
+    y_min = min(y)
+    img_max = max(img)
+
+    if y_min < 0:
+        y = y - y_min
+    if x_min < 0:
+        x = x - x_min
+
+    x_max = max(x)
+    y_max = max(y)
+    rot = rot + math.pi
+    rot = rot / (math.pi * 2.0)
+
+    x = x / float(x_max)
+    y = y / float(y_max)
+    img = img / float(img_max)
+    idT = idT / float(idT_max)
+    data_f = [x,y,rot,img, idT]
+    data_f = np.transpose(data_f)
+    return data_f
 
 
 
@@ -330,12 +422,22 @@ if __name__ == "__main__":
     import os
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
-
-    TRAIN_IMAGES = glob.glob('data/cars/all/*.png')
+    imgpath = '/media/ranulfo/Data/DEC/car_index/'
+    TRAIN_IMAGES = glob.glob('/media/ranulfo/Data/DEC/car_index/*.png')
     TEST_IMAGES = glob.glob('data/cars/test/*.png')
 
-    x = load_image(TRAIN_IMAGES)
-    x_test = load_image(TEST_IMAGES)
+
+
+    x_img = load_image(TRAIN_IMAGES, imgpath)
+    x_test = load_image(TRAIN_IMAGES, imgpath)
+
+    x_data = load_data('/media/ranulfo/Data/DEC/')
+
+
+    a = open('/media/ranulfo/Data/DEC/data.txt', 'w')
+    for data in x_data:
+        a.write(str(data) + '\n')
+    a.close()
 
     # # load dataset
     # from datasets import load_data
@@ -373,32 +475,34 @@ if __name__ == "__main__":
         pretrain_epochs = args.pretrain_epochs
 
     # prepare the DEC model
-    dec = DEC(dims=[x.shape[-1], 500, 500, 2000, 10], n_clusters=n_clusters, init=init)
+    dec = DEC(dims=[x_data.shape[-1], 500, 500, 2000, 10], n_clusters=n_clusters, init=init)
 
     # if args.ae_weights is None:
-    #     dec.pretrain(x=x, y=y, optimizer=pretrain_optimizer,
-    #                  epochs=pretrain_epochs, batch_size=args.batch_size,
-    #                  save_dir=args.save_dir)
+    dec.pretrain_mlp(x=x_data, y=None, optimizer=pretrain_optimizer,
+                 epochs=pretrain_epochs, batch_size=args.batch_size,
+                 save_dir=args.save_dir)
     # else:
     #     dec.autoencoder.load_weights(args.ae_weights)
 
-    dec.encoder = load_model('models/encoderModel_best.hdf5')
+    dec.encoder = load_model('/media/ranulfo/Data/DEC/models/encoderModel_best.hdf5')
 
-    # dec.model.summary()
-    # t0 = time()
-    # dec.compile(optimizer=SGD(0.01, 0.9), loss='kld')
-    # y_pred = dec.fit(x, y=None, tol=args.tol, maxiter=args.maxiter, batch_size=args.batch_size,
-    #                  update_interval=update_interval, save_dir=args.save_dir)
-    # # print('acc:', metrics.acc(y, y_pred))
-    # print('clustering time: ', (time() - t0))
+    dec.model.summary()
+    t0 = time()
+    dec.compile(optimizer=SGD(0.01, 0.9), loss='kld')
+    y_pred = dec.fit([x_img,x_data], y=None, tol=args.tol, maxiter=args.maxiter, batch_size=args.batch_size,
+                     update_interval=update_interval, save_dir=args.save_dir)
 
-    dec.model.load_weights('models/DEC_model_final2.h5')
-    y_pred = dec.model.predict(x)
+
+    # print('acc:', metrics.acc(y, y_pred))
+    print('clustering time: ', (time() - t0))
+
+    # dec.model.load_weights('/media/ranulfo/Data/DEC/models/DEC_model_final2.h5')
+    y_pred = dec.model.predict([x_img,x_data])
     print(y_pred)
     print(y_pred.shape)
 
-    for i, img in enumerate(x):
+    for i, img in enumerate(x_img):
         img = img * 255
         ind = np.argmax(y_pred[i])
-        cv2.imwrite('data/cars/label_result2/' +str(ind) + '_'+ str(i) + '.png', img)
+        cv2.imwrite('/media/ranulfo/Data/DEC/data/cars/label_result5/' +str(ind) + '_'+ str(i) + '.png', img)
 
