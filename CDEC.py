@@ -149,7 +149,7 @@ class DEC(object):
 
         model = Sequential()
         model.add(Dense(8, input_dim=self.input_dim, activation="relu"))
-        model.add(Dense(5, activation="relu"))
+        model.add(Dense(4, activation="relu"))
 
         self.mlp_model = model
 
@@ -394,7 +394,7 @@ def load_data(path):
     y = y / float(y_max)
     img = img / float(img_max)
     idT = idT / float(idT_max)
-    data_f = [x,y,rot,img, idT]
+    data_f = [x,y,rot, idT]
     data_f = np.transpose(data_f)
     return data_f
 
@@ -504,5 +504,5 @@ if __name__ == "__main__":
     for i, img in enumerate(x_img):
         img = img * 255
         ind = np.argmax(y_pred[i])
-        cv2.imwrite('/media/ranulfo/Data/DEC/data/cars/label_result5/' +str(ind) + '_'+ str(i) + '.png', img)
+        cv2.imwrite('/media/ranulfo/Data/DEC/data/cars/label_result6/' +str(ind) + '_'+ str(i) + '.png', img)
 
