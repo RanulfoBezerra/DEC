@@ -149,7 +149,7 @@ class DEC(object):
 
         model = Sequential()
         model.add(Dense(4, input_dim=self.input_dim, activation="relu"))
-        model.add(Dense(1, activation="linear"))
+        model.add(Dense(2, activation="linear"))
 
         self.mlp_model = model
 
@@ -324,8 +324,8 @@ class DEC(object):
 
         # save the trained model
         logfile.close()
-        print('saving model to:', save_dir + '/DEC_model_final.h5')
-        self.model.save_weights(save_dir + '/DEC_model_final.h5')
+        print('saving model to:', save_dir + '/DEC_model_mlp_d_7.h5')
+        self.model.save_weights(save_dir + '/DEC_model_mlp_d_7.h5')
 
         return y_pred
 
@@ -394,7 +394,7 @@ def load_data(path):
     y = y / float(y_max)
     img = img / float(img_max)
     idT = idT / float(idT_max)
-    data_f = [idT]
+    data_f = [idT, img]
     data_f = np.transpose(data_f)
     return data_f
 
