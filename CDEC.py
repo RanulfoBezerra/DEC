@@ -148,12 +148,12 @@ class DEC(object):
         n_data = 4
 
         model = Sequential()
-        model.add(Dense(8, input_dim=self.input_dim, activation="relu"))
-        model.add(Dense(4, activation="relu"))
+        model.add(Dense(4, input_dim=self.input_dim, activation="relu"))
+        model.add(Dense(1, activation="linear"))
 
         self.mlp_model = model
 
-        input2 = self.mlp_model.output
+        input2 = self.mlp_model.input
         input1 = self.encoder.output
 
         cluster_input = concatenate([input1, input2])
@@ -199,7 +199,7 @@ class DEC(object):
         print('Pretrained weights are saved to %s/ae_weights.h5' % save_dir)
         self.pretrained = True
 
-    def pretrain_mlp(self, x, y=None, optimizer='adam', epochs=200, batch_size=256, save_dir='results/temp'):
+    def pretrain_mlp(self, x, y=None, optimizer='adam', epochs=200, batch_size=10, save_dir='results/temp'):
         print('...Pretraining...')
         self.mlp_model.compile(optimizer=optimizer, loss='mse')
 
@@ -394,7 +394,7 @@ def load_data(path):
     y = y / float(y_max)
     img = img / float(img_max)
     idT = idT / float(idT_max)
-    data_f = [x,y,rot, idT]
+    data_f = [idT]
     data_f = np.transpose(data_f)
     return data_f
 
@@ -479,7 +479,7 @@ if __name__ == "__main__":
 
     # if args.ae_weights is None:
     dec.pretrain_mlp(x=x_data, y=None, optimizer=pretrain_optimizer,
-                 epochs=pretrain_epochs, batch_size=args.batch_size,
+                 epochs=pretrain_epochs, batch_size=256,
                  save_dir=args.save_dir)
     # else:
     #     dec.autoencoder.load_weights(args.ae_weights)
@@ -504,5 +504,5 @@ if __name__ == "__main__":
     for i, img in enumerate(x_img):
         img = img * 255
         ind = np.argmax(y_pred[i])
-        cv2.imwrite('/media/ranulfo/Data/DEC/data/cars/label_result6/' +str(ind) + '_'+ str(i) + '.png', img)
+        cv2.imwrite('/media/ranulfo/Data/DEC/data/cars/label_result7/' +str(ind) + '_'+ str(i) + '.png', img)
 
