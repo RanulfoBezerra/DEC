@@ -556,27 +556,28 @@ if __name__ == "__main__":
     desom.compile(gamma=args.gamma, optimizer=optimizer)
 
     # Load pre-trained AE weights or pre-train
-    if args.ae_weights is None and args.pretrain_epochs > 0:
-        desom.pretrain(X=x_img, y=None, optimizer=pretrain_optimizer,
-                       epochs=args.pretrain_epochs, batch_size=args.batch_size,
-                       save_dir=args.save_dir)
-    elif args.ae_weights is not None:
-        desom.load_ae_weights(args.ae_weights)
+    # if args.ae_weights is None and args.pretrain_epochs > 0:
+    #     desom.pretrain(X=x_img, y=None, optimizer=pretrain_optimizer,
+    #                    epochs=args.pretrain_epochs, batch_size=args.batch_size,
+    #                    save_dir=args.save_dir)
+    # elif args.ae_weights is not None:
+    #     desom.load_ae_weights(args.ae_weights)
 
-    desom.pretrain(X=x_img, optimizer=pretrain_optimizer,
-                   epochs=args.pretrain_epochs, batch_size=args.batch_size,
-                   save_dir=args.save_dir)
+    # desom.pretrain(X=x_img, optimizer=pretrain_optimizer,
+    #                epochs=args.pretrain_epochs, batch_size=args.batch_size,
+    #                save_dir=args.save_dir)
 
     # Fit model
     t0 = time()
-    desom.fit([x_img,x_data], None, None, None, args.iterations, args.som_iterations, args.eval_interval,
-              args.save_epochs, args.batch_size, args.Tmax, args.Tmin, args.decay, args.save_dir)
+    # desom.fit([x_img,x_data], None, None, None, args.iterations, args.som_iterations, args.eval_interval,
+    #           args.save_epochs, args.batch_size, args.Tmax, args.Tmin, args.decay, args.save_dir)
     print('Training time: ', (time() - t0))
 
     # print(y_pred)
     # print(y_pred.shape)
     #
-    desom.load_ae_weights(args.ae_weights)
+    desom.model.load_weights(args.ae_weights)
+
     y_pred = desom.model.predict([x_img,x_data])
     for i, img in enumerate(x_img):
         img = img * 255

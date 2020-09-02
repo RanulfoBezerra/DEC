@@ -497,7 +497,7 @@ def load_data(path):
     y = y / float(y_max)
     img = img / float(img_max)
     idT = idT / float(idT_max)
-    data_f = [idT, img]
+    data_f = [x,y,rot, idT, img]
     data_f = np.transpose(data_f)
     return data_f
 
@@ -575,7 +575,7 @@ if __name__ == "__main__":
     for i, img in enumerate(x_img):
         img = img * 255
         ind = np.argmax(y_pred[i])
-        cv2.imwrite('/media/ranulfo/Data/DEC/data/cars/label_result_som1/' + str(ind) + '_' + str(i) + '.png', img)
+        cv2.imwrite('/media/ranulfo/Data/DEC/data/cars/label_result_som2/' + str(ind) + '_' + str(i) + '.png', img)
 
     # Generate DESOM map visualization using reconstructed prototypes
     if args.dataset in ['mnist', 'fmnist', 'usps']:
