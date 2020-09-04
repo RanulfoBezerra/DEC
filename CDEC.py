@@ -30,6 +30,7 @@ import cv2
 from keras.models import load_model
 import math
 from tensorflow.keras.models import Sequential
+import matplotlib.pyplot as plt
 
 
 def autoencoder(dims, act='relu', init='glorot_uniform'):
@@ -254,8 +255,42 @@ class DEC(object):
     def compile(self, optimizer='sgd', loss='kld'):
         self.model.compile(optimizer=optimizer, loss=loss)
 
+    def silluete_n_clusters(self, x):
+        kmean_input = np.concatenate((x[1], self.encoder.predict(x[0])), axis=1)
+        # kmean_input = self.encoder.predict(x[0])
+        kmax = 158
+        sil = []
+        print('Initialize KMeans')
+        sse = []
+        points = kmean_input
+        past_sse = 999
+        min_sse_dif = 9999
+        for k in range(65, kmax + 1):
+            kmeans = KMeans(n_clusters=k).fit(points)
+            centroids = kmeans.cluster_centers_
+            pred_clusters = kmeans.predict(points)
+            curr_sse = 0
+
+            # calculate square of Euclidean distance of each point from its cluster center and add to current WSS
+            for i in range(len(points)):
+                curr_center = centroids[pred_clusters[i]]
+                curr_sse += (points[i, 0] - curr_center[0]) ** 2 + (points[i, 1] - curr_center[1]) ** 2
+
+            if abs(past_sse - curr_sse) < min_sse_dif:
+                min_sse_dif = abs(past_sse - curr_sse)
+                index = k
+                print("Int Label", k, min_sse_dif)
+
+            past_sse = curr_sse
+
+            sse.append(curr_sse)
+        print("Label", index)
+        self.n_clusters = index
+
     def fit(self, x, y=None, maxiter=2e4, batch_size=256, tol=1e-3,
             update_interval=140, save_dir='./results/temp'):
+
+        from sklearn.metrics import silhouette_score
 
         print('Update interval', update_interval)
         save_interval = int(x[0].shape[0] / batch_size) * 5  # 5 epochs
@@ -263,12 +298,23 @@ class DEC(object):
 
         # Step 1: initialize cluster centers using k-means
         t1 = time()
-        print('Initializing cluster centers with k-means.')
-        kmeans = KMeans(n_clusters=self.n_clusters, n_init=20)
+        kmean_input = np.concatenate((x[1], self.encoder.predict(x[0])), axis=1)
+
         # encoded_data = self.encoder.predict(x)
         #
         # data = np.reshape(encoded_data, (8,8))
-        kmean_input = np.concatenate((x[1], self.encoder.predict(x[0])), axis=1)
+
+
+        print('Initializing cluster centers with k-means.')
+        kmeans = KMeans(n_clusters=self.n_clusters, n_init=20)
+
+        # for k in range(65, kmax + 1):
+        #     kmeans = KMeans(n_clusters=k).fit(kmean_input)
+        #     labels = kmeans.labels_
+        #     sil.append(silhouette_score(kmean_input, labels, metric='euclidean'))
+        # plt.plot(sse)
+        # plt.show()
+
         y_pred = kmeans.fit_predict(kmean_input)
         y_pred_last = np.copy(y_pred)
         self.model.get_layer(name='clustering').set_weights([kmeans.cluster_centers_])
@@ -330,7 +376,20 @@ class DEC(object):
         return y_pred
 
 
+import keras.backend as K
 
+
+def custom_mse(y_true, y_pred):
+    # calculating squared difference between target and predicted values
+    loss = K.square(y_pred - y_true)  # (batch_size, 2)
+
+    # multiplying the values with weights along batch dimension
+    loss = loss * [0.3, 0.7]  # (batch_size, 2)
+
+    # summing both loss values along batch dimension
+    loss = K.sum(loss, axis=1)  # (batch_size,)
+
+    return loss
 
 def load_image(path, imgpath):
     dim = 128
@@ -394,11 +453,50 @@ def load_data(path):
     y = y / float(y_max)
     img = img / float(img_max)
     idT = idT / float(idT_max)
-    data_f = [idT, img]
+    data_f = [x,y,idT, img]
     data_f = np.transpose(data_f)
     return data_f
 
+def silluete_n_clusters(x, encoder):
+    kmean_input = np.concatenate((x[1], encoder.predict(x[0])), axis=1)
+    # kmean_input = self.encoder.predict(x[0])
+    kmax = 158
+    threshold = 0.1
+    sil = []
+    print('Initialize KMeans')
+    sse = []
+    points = kmean_input
+    past_sse = 999
+    min_sse_dif = 9999
+    for k in range(65, kmax + 1):
+        kmeans = KMeans(n_clusters=k).fit(points)
+        centroids = kmeans.cluster_centers_
+        pred_clusters = kmeans.predict(points)
+        curr_sse = 0
 
+        # calculate square of Euclidean distance of each point from its cluster center and add to current WSS
+        for i in range(len(points)):
+            curr_center = centroids[pred_clusters[i]]
+            curr_sse += (points[i, 0] - curr_center[0]) ** 2 + (points[i, 1] - curr_center[1]) ** 2
+
+        dist = abs(past_sse - curr_sse)
+
+
+
+
+        if dist < min_sse_dif:
+            if dist < threshold:
+                index = k
+                break
+            min_sse_dif = dist
+            index = k
+            print("Int Label", k, min_sse_dif)
+
+        past_sse = curr_sse
+
+        sse.append(curr_sse)
+    print("Label", index)
+    return  index
 
 
 
@@ -474,17 +572,21 @@ if __name__ == "__main__":
     if args.pretrain_epochs is not None:
         pretrain_epochs = args.pretrain_epochs
 
+    encoder = load_model('/media/ranulfo/Data/DEC/models/encoderModel_best.hdf5')
+
+    n_clusters = silluete_n_clusters([x_img, x_data], encoder)
+
     # prepare the DEC model
     dec = DEC(dims=[x_data.shape[-1], 500, 500, 2000, 10], n_clusters=n_clusters, init=init)
 
     # if args.ae_weights is None:
-    dec.pretrain_mlp(x=x_data, y=None, optimizer=pretrain_optimizer,
-                 epochs=pretrain_epochs, batch_size=256,
-                 save_dir=args.save_dir)
+    # dec.pretrain_mlp(x=x_data, y=None, optimizer=pretrain_optimizer,
+    #              epochs=pretrain_epochs, batch_size=256,
+    #              save_dir=args.save_dir)
     # else:
     #     dec.autoencoder.load_weights(args.ae_weights)
 
-    dec.encoder = load_model('/media/ranulfo/Data/DEC/models/encoderModel_best.hdf5')
+
 
     dec.model.summary()
     t0 = time()
@@ -504,5 +606,5 @@ if __name__ == "__main__":
     for i, img in enumerate(x_img):
         img = img * 255
         ind = np.argmax(y_pred[i])
-        cv2.imwrite('/media/ranulfo/Data/DEC/data/cars/label_result7/' +str(ind) + '_'+ str(i) + '.png', img)
+        cv2.imwrite('/media/ranulfo/Data/DEC/data/cars/result_d_all_kmsse/' +str(ind) + '_'+ str(i) + '.png', img)
 
