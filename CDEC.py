@@ -347,6 +347,7 @@ class DEC(object):
 
                 # check stop criterion
                 delta_label = np.sum(y_pred != y_pred_last).astype(np.float32) / y_pred.shape[0]
+
                 y_pred_last = np.copy(y_pred)
                 if ite > 0 and delta_label < tol:
                     print('delta_label ', delta_label, '< tol ', tol)
@@ -363,15 +364,17 @@ class DEC(object):
 
             # save intermediate model
             if ite % save_interval == 0:
-                print('saving model to:', save_dir + '/DEC_model_' + str(ite) + '.h5')
+                print('Iter %d: loss = %.5f, delta = %.5f' % (ite, loss, delta_label)
+                      )
+                # print('saving model to:', save_dir + '/DEC_model_' + str(ite) + '.h5')
                 self.model.save_weights(save_dir + '/DEC_model_' + str(ite) + '.h5')
 
             ite += 1
 
         # save the trained model
         logfile.close()
-        print('saving model to:', save_dir + '/DEC_model_mlp_d_7.h5')
-        self.model.save_weights(save_dir + '/DEC_model_mlp_d_7.h5')
+        print('saving model to:', save_dir + '/DEC_model_mlp_d_scc.h5')
+        self.model.save_weights(save_dir + '/DEC_model_mlp_d_scc.h5')
 
         return y_pred
 
@@ -453,7 +456,7 @@ def load_data(path):
     y = y / float(y_max)
     img = img / float(img_max)
     idT = idT / float(idT_max)
-    data_f = [x,y,idT, img]
+    data_f = [idT, img]
     data_f = np.transpose(data_f)
     return data_f
 
@@ -575,6 +578,7 @@ if __name__ == "__main__":
     encoder = load_model('/media/ranulfo/Data/DEC/models/encoderModel_best.hdf5')
 
     n_clusters = silluete_n_clusters([x_img, x_data], encoder)
+    # n_clusters = 116
 
     # prepare the DEC model
     dec = DEC(dims=[x_data.shape[-1], 500, 500, 2000, 10], n_clusters=n_clusters, init=init)
@@ -590,7 +594,7 @@ if __name__ == "__main__":
 
     dec.model.summary()
     t0 = time()
-    dec.compile(optimizer=SGD(0.01, 0.9), loss='kld')
+    dec.compile(optimizer=SGD(0.01, 0.9), loss='categorical_crossentropy') #sparse_categorical_crossentropy kld
     y_pred = dec.fit([x_img,x_data], y=None, tol=args.tol, maxiter=args.maxiter, batch_size=args.batch_size,
                      update_interval=update_interval, save_dir=args.save_dir)
 
@@ -598,7 +602,7 @@ if __name__ == "__main__":
     # print('acc:', metrics.acc(y, y_pred))
     print('clustering time: ', (time() - t0))
 
-    # dec.model.load_weights('/media/ranulfo/Data/DEC/models/DEC_model_final2.h5')
+    # dec.model.load_weights('/home/ranulfo/Projects/Python/DEC/results/DEC_model_mlp_d_scc_2.h5')
     y_pred = dec.model.predict([x_img,x_data])
     print(y_pred)
     print(y_pred.shape)
@@ -606,5 +610,5 @@ if __name__ == "__main__":
     for i, img in enumerate(x_img):
         img = img * 255
         ind = np.argmax(y_pred[i])
-        cv2.imwrite('/media/ranulfo/Data/DEC/data/cars/result_d_all_kmsse/' +str(ind) + '_'+ str(i) + '.png', img)
+        cv2.imwrite('/media/ranulfo/Data/DEC/data/cars/result_d_id-img_scc/' +str(ind) + '_'+ str(i) + '.png', img)
 
