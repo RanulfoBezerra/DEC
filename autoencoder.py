@@ -19,8 +19,8 @@ from keras.callbacks import CSVLogger
 from keras.layers import Conv2D, Conv2DTranspose, Dense, Flatten, Reshape
 from keras.models import Sequential, Model
 
-TRAIN_IMAGES = glob.glob('data/cars/all/*.png')
-TEST_IMAGES = glob.glob('data/cars/test/*.png')
+TRAIN_IMAGES = glob.glob('/media/ranulfo/Data/DEC/data/cars/all/*.png')
+TEST_IMAGES = glob.glob('/media/ranulfo/Data/DEC/data/cars/all/*.png')
 
 
 def load_image(path):
@@ -203,8 +203,8 @@ class Autoencoder():
                                              epochs=epochs,
                                              validation_data=(x_val, y_val),
                                              callbacks=[csv_logger])
-        self.autoencoder_model.save("models/autoencoderModel_test.hdf5")
-        self.autoencoder_model.save_weights("models/autoencoderWeights_test.hdf5", overwrite=True)
+        self.autoencoder_model.save("/media/ranulfo/Data/DEC/models/autoencoderModel_test.hdf5")
+        self.autoencoder_model.save_weights("/media/ranulfo/Data/DEC/models/autoencoderWeights_test.hdf5", overwrite=True)
         # plt.plot(history.history['loss'])
         # plt.plot(history.history['val_loss'])
         # plt.title('Model loss')
@@ -217,17 +217,17 @@ class Autoencoder():
         preds = self.autoencoder_model.predict(x_test)
         return preds
 
-ae = Autoencoder()
-ae.train_model(x_train, y_train, x_val, y_val, epochs=200, batch_size=5)
-model = ae.autoencoder_model
+# ae = Autoencoder()
+# ae.train_model(x_train, y_train, x_val, y_val, epochs=300, batch_size=10)
+# model = ae.autoencoder_model
 
-# model = load_model('models/autoencoderModel_test.hdf5')
+model = load_model('/media/ranulfo/Data/DEC/models/autoencoderModel_test.hdf5')
 score = model.evaluate(x_train, x_train, verbose=1)
 print("Score", score)
 layers = len(model.layers)
 encoderLayer = int(layers/2) - 1
 encoder = Model(model.layers[0].input, model.layers[encoderLayer].output)
-encoder.save("models/encoderModel_test.hdf5")
+encoder.save("/media/ranulfo/Data/DEC/models/encoderModel_500.hdf5")
 # encoder = load_model("models/encoderModel_4.hdf5")
 # model.compile(loss='mse', optimizer=optimizer)
 encoder.summary()
@@ -238,12 +238,12 @@ imgs = model.predict(x_test)
 # print(datas.shape)
 for i, img in enumerate(imgs):
     img = img * 255
-    cv2.imwrite('data/cars/result/'+str(i)+'.png', img)
+    cv2.imwrite('/media/ranulfo/Data/DEC/data/cars/ae/'+str(i)+'.png', img)
 print(imgs.shape)
 
 for i, img in enumerate(x_test):
     img = img * 255
-    cv2.imwrite('data/cars/result/'+str(i)+'_truth.png', img)
+    cv2.imwrite('/media/ranulfo/Data/DEC/data/cars/ae/'+str(i)+'_truth.png', img)
 print(imgs.shape)
 
 

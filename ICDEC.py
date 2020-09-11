@@ -577,8 +577,8 @@ if __name__ == "__main__":
 
     encoder = load_model('/media/ranulfo/Data/DEC/models/encoderModel_best.hdf5')
 
-    n_clusters = silluete_n_clusters([x_img, x_data], encoder)
-    # n_clusters = 116
+    # n_clusters = silluete_n_clusters([x_img, x_data], encoder)
+    n_clusters = 158
 
     # prepare the DEC model
     dec = DEC(dims=[x_data.shape[-1], 500, 500, 2000, 10], n_clusters=n_clusters, init=init)
@@ -610,5 +610,5 @@ if __name__ == "__main__":
     for i, img in enumerate(x_img):
         img = img * 255
         ind = np.argmax(y_pred[i])
-        cv2.imwrite('/media/ranulfo/Data/DEC/data/cars/result_img_0_5/' +str(ind) + '_'+ str(i) + '.png', img)
+        cv2.imwrite('/media/ranulfo/Data/DEC/data/cars/result_img_158/' +str(ind) + '_'+ str(i) + '.png', img)
 
