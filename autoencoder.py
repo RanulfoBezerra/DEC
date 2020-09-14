@@ -13,7 +13,7 @@ from keras.optimizers import Adam
 from keras.callbacks import EarlyStopping
 from keras.layers import Input, Dense, Activation, BatchNormalization, Flatten, Conv2D
 from keras.layers import MaxPooling2D, Dropout, UpSampling2D
-from keras.models import load_model
+from tensorflow.keras.models import load_model
 from keras.callbacks import CSVLogger
 
 from keras.layers import Conv2D, Conv2DTranspose, Dense, Flatten, Reshape
@@ -59,6 +59,47 @@ def train_val_split(x_train, y_train):
 
 x_train, y_train, x_val, y_val = train_val_split(x_train, x_train)
 print(x_train.shape, x_val.shape)
+
+
+def save_imgs(imgs):
+    for i, img in enumerate(imgs):
+        img = img * 255
+        cv2.imwrite('/media/ranulfo/Data/DEC/data/cars/ae/' + str(i) + '.png', img)
+    print(imgs.shape)
+
+def save_imgmatrix(encoder, path, num_clusters):
+    # im = np.load(path+'img_data.npy')
+    # print("img", im.shape, im)
+    img_size_matrix = []
+    track_path = path + 'Tracks-Img/'
+    img_matrix = []
+    img_matrix_mean = []
+    initial_size = 0
+
+    for cl_num in range(num_clusters):
+        print(track_path+str(cl_num)+'_*.png')
+        imgs_path = glob.glob(track_path+str(cl_num)+'_*.png')
+        # print(imgs_path)
+        img_list = load_image(imgs_path)
+        imgs_data = encoder.predict(img_list)
+        cluster_size, _ = imgs_data.shape
+        cluster_size = initial_size + cluster_size + 1
+        img_size_matrix.append([initial_size, cluster_size, len(imgs_path)])
+        initial_size = cluster_size - 1
+        img_matrix_mean.append(np.mean(imgs_data, axis=0))
+        img_matrix.append(np.concatenate((np.mean(imgs_data, axis=0), np.std(imgs_data, axis=0) ) ) )
+
+        if cl_num > 0:
+            final_imgs_data = np.concatenate((final_imgs_data, imgs_data))
+        else:
+            final_imgs_data = imgs_data
+    print(img_matrix)
+    np.save(path+'img_data', final_imgs_data)
+    np.save(path + 'img_data_mean', img_matrix_mean)
+    np.save(path+'img_data_mean_std', img_matrix)
+    np.save(path+'img_data_size',img_size_matrix)
+
+
 
 
 class Autoencoder():
@@ -221,30 +262,38 @@ class Autoencoder():
 # ae.train_model(x_train, y_train, x_val, y_val, epochs=300, batch_size=10)
 # model = ae.autoencoder_model
 
-model = load_model('/media/ranulfo/Data/DEC/models/autoencoderModel_test.hdf5')
-score = model.evaluate(x_train, x_train, verbose=1)
-print("Score", score)
-layers = len(model.layers)
-encoderLayer = int(layers/2) - 1
-encoder = Model(model.layers[0].input, model.layers[encoderLayer].output)
-encoder.save("/media/ranulfo/Data/DEC/models/encoderModel_500.hdf5")
-# encoder = load_model("models/encoderModel_4.hdf5")
+# model = load_model('/media/ranulfo/Data/DEC/models/autoencoderModel_test.hdf5')
+# score = model.evaluate(x_train, x_train, verbose=1)
+# print("Score", score)
+# layers = len(model.layers)
+# encoderLayer = int(layers/2) - 1
+# encoder = Model(model.layers[0].input, model.layers[encoderLayer].output)
+# encoder.save("/media/ranulfo/Data/DEC/models/encoderModel_500.hdf5")
+encoder = load_model("/media/ranulfo/RSSD/DEC/models/encoderModel_500.hdf5")
 # model.compile(loss='mse', optimizer=optimizer)
 encoder.summary()
 
-print("Layers", len(model.layers))
-imgs = model.predict(x_test)
+track_path = '/media/ranulfo/RSSD/Data/map_traffic/Campus/results/4/'
+save_imgmatrix(encoder, track_path, 159)
+
+# print("Layers", len(model.layers))
+# imgs = model.predict(x_test)
 # datas = encoder.predict(x_test)
 # print(datas.shape)
-for i, img in enumerate(imgs):
-    img = img * 255
-    cv2.imwrite('/media/ranulfo/Data/DEC/data/cars/ae/'+str(i)+'.png', img)
-print(imgs.shape)
 
-for i, img in enumerate(x_test):
-    img = img * 255
-    cv2.imwrite('/media/ranulfo/Data/DEC/data/cars/ae/'+str(i)+'_truth.png', img)
-print(imgs.shape)
+# save_imgs(imgs)
+# save_imgs(x_test)
+
+
+# for i, img in enumerate(imgs):
+#     img = img * 255
+#     cv2.imwrite('/media/ranulfo/Data/DEC/data/cars/ae/'+str(i)+'.png', img)
+# print(imgs.shape)
+#
+# for i, img in enumerate(x_test):
+#     img = img * 255
+#     cv2.imwrite('/media/ranulfo/Data/DEC/data/cars/ae/'+str(i)+'_truth.png', img)
+# print(imgs.shape)
 
 
 # print(model.predict(x_test))
